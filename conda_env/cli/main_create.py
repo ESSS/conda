@@ -11,6 +11,7 @@ from conda.common.disk import rm_rf
 from conda.misc import touch_nonadmin
 from conda.plan import is_root_prefix
 
+from ..etc_conda_scripts import write_activate_deactivate
 from ..installers.base import get_installer, InvalidInstaller
 from .. import exceptions
 from .. import specs
@@ -121,6 +122,9 @@ def execute(args, parser):
             )
             return -1
 
+    write_activate_deactivate(env, prefix)
+
     touch_nonadmin(prefix)
     if not args.json:
         print(cli_install.print_activate(args.name if args.name else prefix))
+

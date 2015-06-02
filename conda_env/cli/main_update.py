@@ -7,6 +7,8 @@ from conda import config
 from conda.cli import common
 from conda.cli import install as cli_install
 from conda.misc import touch_nonadmin
+
+from ..etc_conda_scripts import write_activate_deactivate
 from ..installers.base import get_installer, InvalidInstaller
 from .. import specs as install_specs
 from .. import exceptions
@@ -122,6 +124,8 @@ def execute(args, parser):
                 """).lstrip().format(installer_type)
             )
             return -1
+
+    write_activate_deactivate(env, prefix)
 
     touch_nonadmin(prefix)
     if not args.json:
