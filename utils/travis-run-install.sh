@@ -44,7 +44,7 @@ main_install() {
         *) ;;
     esac
 
-    python -m pip install psutil ruamel.yaml pycosat pycrypto requests==2.12.4 pyopenssl==16.2.0
+    python -m pip install psutil ruamel.yaml pycosat pycrypto requests==2.12.4 pyopenssl==16.2.0 jinja2
 
     case "${TRAVIS_PYTHON_VERSION:-PYTHON_VERSION}" in
       '2.7')
