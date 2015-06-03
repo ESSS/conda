@@ -59,6 +59,7 @@ install:
   - conda install -q python=%PYTHON_VERSION%
   - conda install -q pytest requests mock
   - conda install -q pycrypto pyflakes pycosat
+  - conda install -q jinja2
   - conda install -q git menuinst
   - conda install -q ruamel_yaml
   - conda install -q anaconda-client
