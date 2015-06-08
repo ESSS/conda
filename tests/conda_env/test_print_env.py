@@ -6,11 +6,13 @@ import unittest
 
 class EnvironmentAndAliasesTestCase(unittest.TestCase):
 
-    ENVIRONMENT = {
-        'PATH' : ['mypath1', 'mypath2'],
-        'ANY_LIST_REALLY' : ['something1', 'something2'],
-        'SINGLE_VAR' : 'single_value',
-    }
+    ENVIRONMENT = [
+        {'PATH' : ['mypath1', 'mypath2']},
+        {'PATH' : ['mypath3']},
+        {'ANY_LIST_REALLY' : ['something1', 'something2']},
+        {'SINGLE_VAR' : 'single_value'},
+        {'SINGLE_INT' : 200},
+    ]
     ALIASES = {
         'my_ls' : 'ls -la'
     }
@@ -61,13 +63,14 @@ class EnvironmentAndAliasesTestCase(unittest.TestCase):
             assert activate == textwrap.dedent(
                 '''
                 export ANY_LIST_REALLY="something1:something2:$ANY_LIST_REALLY"
-                export PATH="mypath1:mypath2:$PATH"
+                export PATH="mypath1:mypath2:mypath3:$PATH"
+                export SINGLE_INT="200"
                 export SINGLE_VAR="single_value"
                 alias my_ls="ls -la"
                 '''
             ).lstrip()
 
-            os.environ['PATH'] = '/usr/bin:mypath1:mypath2:/usr/local/bin'
+            os.environ['PATH'] = '/usr/bin:mypath1:mypath2:mypath3:/usr/local/bin'
             os.environ['SINGLE_VAR'] = 'single_value'
             os.environ['ANY_LIST_REALLY'] = 'something1:something2:'
             deactivate = print_env('deactivate', self.ENVIRONMENT, self.ALIASES)
@@ -76,7 +79,7 @@ class EnvironmentAndAliasesTestCase(unittest.TestCase):
                 unset ANY_LIST_REALLY
                 export PATH="/usr/bin:/usr/local/bin"
                 unset SINGLE_VAR
-                unalias my_ls
+                [ `alias | grep my_ls= | wc -l` != 0 ] && unalias my_ls
                 '''
             ).lstrip()
         finally:
@@ -96,13 +99,14 @@ class EnvironmentAndAliasesTestCase(unittest.TestCase):
             assert activate == textwrap.dedent(
                 '''
                 set ANY_LIST_REALLY=something1;something2;%ANY_LIST_REALLY%
-                set PATH=mypath1;mypath2;%PATH%
+                set PATH=mypath1;mypath2;mypath3;%PATH%
+                set SINGLE_INT=200
                 set SINGLE_VAR=single_value
                 doskey my_ls=ls -la
                 '''
             ).lstrip()
 
-            os.environ['PATH'] = 'C:\\bin;mypath1;mypath2;C:\\Users\\me\\bin'
+            os.environ['PATH'] = 'C:\\bin;mypath1;mypath2;mypath3;C:\\Users\\me\\bin'
             os.environ['SINGLE_VAR'] = 'single_value'
             os.environ['ANY_LIST_REALLY'] = 'something1;something2;'
             deactivate = print_env('deactivate', self.ENVIRONMENT, self.ALIASES)
@@ -131,13 +135,14 @@ class EnvironmentAndAliasesTestCase(unittest.TestCase):
             assert activate == textwrap.dedent(
                 '''
                 set ANY_LIST_REALLY=something1;something2;%ANY_LIST_REALLY%
-                set PATH=mypath1;mypath2;%PATH%
+                set PATH=mypath1;mypath2;mypath3;%PATH%
+                set SINGLE_INT=200
                 set SINGLE_VAR=single_value
                 alias my_ls ls -la
                 '''
             ).lstrip()
 
-            os.environ['PATH'] = 'C:\\bin;mypath1;mypath2;C:\\Users\\me\\bin'
+            os.environ['PATH'] = 'C:\\bin;mypath1;mypath2;mypath3;C:\\Users\\me\\bin'
             os.environ['SINGLE_VAR'] = 'single_value'
             os.environ['ANY_LIST_REALLY'] = 'something1;something2;'
             deactivate = print_env('deactivate', self.ENVIRONMENT, self.ALIASES)
