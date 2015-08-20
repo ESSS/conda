@@ -8,6 +8,12 @@
 import sys
 import os
 
+if '--conda-self-build' in sys.argv:
+    conda_self_build = True
+    sys.argv.remove('--conda-self-build')
+else:
+    conda_self_build = False
+
 if 'develop' in sys.argv:
     from setuptools import setup
     using_setuptools = True
@@ -25,7 +31,7 @@ if sys.version_info[:2] < (2, 7) or sys.version_info > (3, 0) and sys.version_in
     sys.exit("conda is only meant for Python 2.7 or 3.3 and up.  current version: %d.%d" % sys.version_info[:2])
 
 try:
-    if os.environ['CONDA_DEFAULT_ENV']:
+    if os.environ['CONDA_DEFAULT_ENV'] and not conda_self_build:
         # Try to prevent accidentally installing conda into a non-root conda environment
         sys.exit("You appear to be in a non-root conda environment. Conda is only "
             "supported in the root environment. Deactivate and try again. If you believe "
