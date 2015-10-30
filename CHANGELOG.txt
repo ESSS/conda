@@ -1,6 +1,65 @@
--------------------
+2015-10-XX   3.18.4:
+--------------------
+  * allow explicit file to contain MD5 hashsums
+  * add --md5 option to "conda list --explicit"
+
+
+2015-10-15   3.18.3:
+--------------------
+  * added a pruning step for more efficient solves, #1702
+  * disallow conda-env to be installed into non-root environment
+  * improve error output for bad command input, #1706
+  * pass env name and setup cmd to menuinst, #1699
+
+
+2015-10-12   3.18.2:
+--------------------
+  * add "conda list --explicit" which contains the URLs of all conda packages
+    to be installed, and can used with the install/create --file option, #1688
+  * fix a potential issue in conda clean
+  * avoid issues with LookupErrors when updating Python in the root
+    environment on Windows
+  * don't fetch the index from the network with conda remove
+  * when installing conda packages directly, "conda install <pkg>.tar.bz2",
+    unlink any installed package with that name (not just the installed one)
+  * allow menu items to be installed in non-root env, #1692
+
+
+2015-09-28   3.18.1:
+--------------------
+  * fix: removed reference to win_ignore_root in plan module
+
+
+2015-09-28   3.18.0:
+--------------------
+  * allow Python to be updated in root environment on Windows, #1657
   * add defaults to specs after getting pinned specs (allows to pin a
     different version of Python than what is installed)
+  * show what older versions are in the solutions in the resolve debug log
+  * fix some issues with Python 3.5
+  * respect --no-deps when installing from .tar or .tar.bz2
+  * avoid infinite recursion with NoPackagesFound and conda update --all --file
+  * fix conda update --file
+  * toposort: Added special case to remove 'pip' dependency from 'python'
+  * show dotlog messages during hint generation with --debug
+  * disable the max_only heuristic during hint generation
+  * new version comparison algorithm, which consistently compares any version
+    string, and better handles version strings using things like alpha, beta,
+    rc, post, and dev. This should remove any inconsistent version comparison
+    that would lead to conda installing an incorrect version.
+  * use the trash in rm_rf, meaning more things will get the benefit of the
+    trash system on Windows
+  * add the ability to pass the --file argument multiple times
+  * add conda upgrade alias for conda update
+  * add update_dependencies condarc option and --update-deps/--no-update-deps
+    command line flags
+  * allow specs with conda update --all
+  * add --show-channel-urls and --no-show-channel-urls command line options
+  * add always_copy condarc option
+  * conda clean properly handles multiple envs directories. This breaks
+    backwards compatibility with some of the --json output. Some of the old
+    --json keys are kept for backwards compatibility.
+
 
 2015-09-11   3.17.0:
 --------------------

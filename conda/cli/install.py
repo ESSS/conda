@@ -42,9 +42,8 @@ def install_tar(prefix, tar_path, verbose=False):
             if fn.endswith('.tar.bz2'):
                 paths.append(join(root, fn))
 
-    depends = misc.install_local_packages(prefix, paths, verbose=verbose)
+    misc.install_local_packages(prefix, paths, verbose=verbose)
     shutil.rmtree(tmp_dir)
-    return depends
 
 
 def check_prefix(prefix, json=False):
@@ -129,13 +128,8 @@ def install(args, parser, command='install'):
         common.error_and_exit("cannot use CONDA_FORCE_32BIT=1 in root env")
 
     if command == 'update':
-        if args.all:
-            if args.packages:
-                common.error_and_exit("""--all cannot be used with packages""",
-                                      json=args.json,
-                                      error_type="ValueError")
-        else:
-            if len(args.packages) == 0:
+        if not args.file:
+            if not args.all and len(args.packages) == 0:
                 common.error_and_exit("""no package names supplied
 # If you want to update to a newer version of Anaconda, type:
 #
@@ -144,7 +138,7 @@ def install(args, parser, command='install'):
                                       json=args.json,
                                       error_type="ValueError")
 
-    if command == 'update':
+    if command == 'update' and not args.all:
         linked = ci.linked(prefix)
         for name in args.packages:
             common.arg2spec(name, json=args.json)
@@ -173,7 +167,11 @@ def install(args, parser, command='install'):
 
     specs = []
     if args.file:
-        specs.extend(common.specs_from_url(args.file, json=args.json))
+        for fpath in args.file:
+            specs.extend(common.specs_from_url(fpath, json=args.json))
+        if '@EXPLICIT' in specs:
+            misc.explicit(specs, prefix)
+            return
     elif getattr(args, 'all', False):
         linked = ci.linked(prefix)
         if not linked:
@@ -200,12 +198,9 @@ def install(args, parser, command='install'):
     num_cp = sum(s.endswith('.tar.bz2') for s in args.packages)
     if num_cp:
         if num_cp == len(args.packages):
-            depends = misc.install_local_packages(prefix, args.packages,
-                                                  verbose=not args.quiet)
-            if args.no_deps:
-                depends = []
-            specs = list(set(depends))
-            args.unknown = True
+            misc.install_local_packages(prefix, args.packages,
+                                        verbose=not args.quiet)
+            return
         else:
             common.error_and_exit(
                 "cannot mix specifications with conda package filenames",
@@ -216,11 +211,8 @@ def install(args, parser, command='install'):
     if len(args.packages) == 1:
         tar_path = args.packages[0]
         if tar_path.endswith('.tar'):
-            depends = install_tar(prefix, tar_path, verbose=not args.quiet)
-            if args.no_deps:
-                depends = []
-            specs = list(set(depends))
-            args.unknown = True
+            install_tar(prefix, tar_path, verbose=not args.quiet)
+            return
 
     if args.use_local:
         from conda.fetch import fetch_index
@@ -337,8 +329,9 @@ environment does not exist: %s
                                                force=args.force,
                                                only_names=only_names,
                                                pinned=args.pinned,
-                                               minimal_hint=args.alt_hint)
-            if args.copy:
+                                               minimal_hint=args.alt_hint,
+                                               update_deps=args.update_deps)
+            if config.always_copy or args.copy:
                 new_link = []
                 for pkg in actions["LINK"]:
                     dist, pkgs_dir, lt = inst.split_linkarg(pkg)
@@ -357,7 +350,14 @@ environment does not exist: %s
                 # Not sure what to do here
                 pass
             args._skip = getattr(args, '_skip', ['anaconda'])
-            args._skip.extend([i.split()[0] for i in e.pkgs])
+            for pkg in e.pkgs:
+                p = pkg.split()[0]
+                if p in args._skip:
+                    # Avoid infinite recursion. This can happen if a spec
+                    # comes from elsewhere, like --file
+                    raise
+                args._skip.append(p)
+
             return install(args, parser, command=command)
         else:
             packages = {index[fn]['name'] for fn in index}
@@ -407,7 +407,7 @@ environment does not exist: %s
     if not args.json:
         print()
         print("Package plan for installation in environment %s:" % prefix)
-        plan.display_actions(actions, index)
+        plan.display_actions(actions, index, show_channel_urls=args.show_channel_urls)
 
     if command in {'install', 'update'}:
         common.check_write(command, prefix)

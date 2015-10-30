@@ -180,6 +180,16 @@ def add_parser_use_index_cache(p):
         help="Use cache of channel index files.",
     )
 
+
+def add_parser_no_use_index_cache(p):
+    p.add_argument(
+        "--no-use-index-cache",
+        action="store_false",
+        default=True,
+        dest="use_index_cache",
+        help="Use cache of channel index files.",
+    )
+
 def add_parser_copy(p):
     p.add_argument(
         '--copy',
@@ -204,10 +214,14 @@ def add_parser_install(p):
                "implies --no-deps.",
     )
     add_parser_pscheck(p)
+    # Add the file kwarg. We don't use {action="store", nargs='*'} as we don't
+    # want to gobble up all arguments after --file.
     p.add_argument(
         "--file",
-        action="store",
-        help="Read package versions from FILE.",
+        default=[],
+        action='append',
+        help="Read package versions from the given file. Repeated file "
+              "specifications can be passed (e.g. --file=file1 --file=file2).",
     )
     add_parser_known(p)
     p.add_argument(
@@ -233,6 +247,21 @@ def add_parser_install(p):
         action="store_true",
         default=False,
         help="Use an alternate algorithm to generate an unsatisfiability hint.")
+    p.add_argument(
+        "--update-dependencies", "--update-deps",
+        action="store_true",
+        dest="update_deps",
+        default=config.update_dependencies,
+        help="Update dependencies (default: %(default)s).",
+    )
+    p.add_argument(
+        "--no-update-dependencies", "--no-update-deps",
+        action="store_false",
+        dest="update_deps",
+        default=not config.update_dependencies,
+        help="Don't update dependencies (default: %(default)s).",
+    )
+    add_parser_show_channel_urls(p)
 
     if 'update' in p.prog:
         # I don't know if p.prog is the correct thing to use here but it's the
@@ -242,7 +271,7 @@ def add_parser_install(p):
             metavar='package_spec',
             action="store",
             nargs='*',
-            help="Package versions to install into the conda environment.",
+            help="Packages to update in the conda environment.",
         ).completer=InstalledPackages
     else: # create or install
         # Same as above except the completer is not only installed packages
@@ -251,9 +280,8 @@ def add_parser_install(p):
             metavar='package_spec',
             action="store",
             nargs='*',
-            help="Package versions to install into the conda environment.",
+            help="Packages to install into the conda environment.",
             ).completer=Packages
-
 
 def add_parser_use_local(p):
     p.add_argument(
@@ -279,6 +307,22 @@ def add_parser_no_pin(p):
         default=True,
         dest='pinned',
         help="Ignore pinned file.",
+    )
+
+def add_parser_show_channel_urls(p):
+    p.add_argument(
+        "--show-channel-urls",
+        action="store_true",
+        dest="show_channel_urls",
+        default=config.show_channel_urls,
+        help="Show channel urls (default: %(default)s).",
+    )
+    p.add_argument(
+        "--no-show-channel-urls",
+        action="store_false",
+        dest="show_channel_urls",
+        default=not config.show_channel_urls,
+        help="Don't show channel urls (default: %(default)s).",
     )
 
 def ensure_override_channels_requires_channel(args, dashc=True, json=False):
@@ -451,12 +495,18 @@ def spec_from_line(line):
 def specs_from_url(url, json=False):
     from conda.fetch import TmpDownload
 
+    explicit = False
     with TmpDownload(url, verbose=False) as path:
         specs = []
         try:
             for line in open(path):
                 line = line.strip()
                 if not line or line.startswith('#'):
+                    continue
+                if line == '@EXPLICIT':
+                    explicit = True
+                if explicit:
+                    specs.append(line)
                     continue
                 spec = spec_from_line(line)
                 if spec is None:

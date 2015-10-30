@@ -7,8 +7,9 @@
 from __future__ import print_function, division, absolute_import
 
 import re
+import os
 import sys
-from os.path import isdir, isfile
+from os.path import isdir, isfile, join
 import logging
 from argparse import RawDescriptionHelpFormatter
 
@@ -58,10 +59,11 @@ def configure_parser(sub_parsers):
     common.add_parser_help(p)
     common.add_parser_prefix(p)
     common.add_parser_json(p)
+    common.add_parser_show_channel_urls(p)
     p.add_argument(
         '-c', "--canonical",
         action="store_true",
-        help="Output canonical names of packages only.",
+        help="Output canonical names of packages only. Implies --no-pip. ",
     )
     p.add_argument(
         '-f', "--full-name",
@@ -69,10 +71,21 @@ def configure_parser(sub_parsers):
         help="Only search for full names, i.e., ^<regex>$.",
     )
     p.add_argument(
+        "--explicit",
+        action="store_true",
+        help="List explicitly all installed conda packaged with URL "
+             "(output may be used by conda create --file).",
+    )
+    p.add_argument(
+        "--md5",
+        action="store_true",
+        help="Add MD5 hashsum when using --explicit",
+    )
+    p.add_argument(
         '-e', "--export",
         action="store_true",
-        help="""Output requirement string only (output may be used by conda create
-                  --file).""",
+        help="Output requirement string only (output may be used by "
+             " conda create --file).",
     )
     p.add_argument(
         '-r', "--revisions",
@@ -111,7 +124,8 @@ def get_packages(installed, regex):
         yield dist
 
 
-def list_packages(prefix, installed, regex=None, format='human'):
+def list_packages(prefix, installed, regex=None, format='human',
+                  show_channel_urls=config.show_channel_urls):
     res = 1
 
     result = []
@@ -130,7 +144,7 @@ def list_packages(prefix, installed, regex=None, format='human'):
             features = set(info.get('features', '').split())
             disp = '%(name)-25s %(version)-15s %(build)15s' % info
             disp += '  %s' % common.disp_features(features)
-            if config.show_channel_urls:
+            if show_channel_urls:
                 disp += '  %s' % config.canonical_channel_name(info.get('url'))
             result.append(disp)
         except (AttributeError, IOError, KeyError, ValueError) as e:
@@ -140,12 +154,14 @@ def list_packages(prefix, installed, regex=None, format='human'):
     return res, result
 
 
-def print_packages(prefix, regex=None, format='human', piplist=False, json=False):
+def print_packages(prefix, regex=None, format='human', piplist=False,
+                   json=False, show_channel_urls=config.show_channel_urls):
     if not isdir(prefix):
         common.error_and_exit("""\
 Error: environment does not exist: %s
 #
-# Use 'conda create' to create an environment before listing its packages.""" % prefix,
+# Use 'conda create' to create an environment before listing its packages.""" %
+                              prefix,
                               json=json,
                               error_type="NoEnvironmentFound")
 
@@ -160,12 +176,34 @@ Error: environment does not exist: %s
     if piplist and config.use_pip and format == 'human':
         add_pip_installed(prefix, installed, json=json)
 
-    exitcode, output = list_packages(prefix, installed, regex, format=format)
+    exitcode, output = list_packages(prefix, installed, regex, format=format,
+                                     show_channel_urls=show_channel_urls)
     if not json:
         print('\n'.join(output))
     else:
         common.stdout_json(output)
     return exitcode
+
+
+def print_explicit(prefix, add_md5=False):
+    import json
+
+    if not isdir(prefix):
+        common.error_and_exit("Error: environment does not exist: %s" % prefix)
+    print_export_header()
+    print("@EXPLICIT")
+
+    meta_dir = join(prefix, 'conda-meta')
+    for fn in sorted(os.listdir(meta_dir)):
+        if not fn.endswith('.json'):
+            continue
+        with open(join(meta_dir, fn)) as fi:
+            meta = json.load(fi)
+        if not meta.get('url'):
+            print('# no URL for: %s' % fn[:-5])
+            continue
+        md5 = meta.get('md5')
+        print(meta['url'] + ('#%s' % md5 if add_md5 and md5 else ''))
 
 
 def execute(args, parser):
@@ -190,6 +228,10 @@ def execute(args, parser):
                                   error_type="NoRevisionLog")
         return
 
+    if args.explicit:
+        print_explicit(prefix, args.md5)
+        return
+
     if args.canonical:
         format = 'canonical'
     elif args.export:
@@ -200,5 +242,6 @@ def execute(args, parser):
     if args.json:
         format = 'canonical'
 
-    exitcode = print_packages(prefix, regex, format, piplist=args.pip, json=args.json)
+    exitcode = print_packages(prefix, regex, format, piplist=args.pip,
+                  json=args.json, show_channel_urls=args.show_channel_urls)
     sys.exit(exitcode)

@@ -72,6 +72,7 @@ rc_bool_keys = [
     'add_anaconda_token',
     'add_pip_as_python_dependency',
     'always_yes',
+    'always_copy',
     'allow_softlinks',
     'changeps1',
     'use_pip',
@@ -80,6 +81,7 @@ rc_bool_keys = [
     'anaconda_upload',
     'show_channel_urls',
     'allow_other_channels',
+    'update_dependencies',
 ]
 
 rc_string_keys = [
@@ -339,6 +341,7 @@ except IOError:
 
 add_pip_as_python_dependency = bool(rc.get('add_pip_as_python_dependency', True))
 always_yes = bool(rc.get('always_yes', False))
+always_copy = bool(rc.get('always_copy', False))
 changeps1 = bool(rc.get('changeps1', True))
 use_pip = bool(rc.get('use_pip', True))
 binstar_upload = rc.get('anaconda_upload',
@@ -351,6 +354,7 @@ show_channel_urls = bool(rc.get('show_channel_urls', False))
 disallow = set(rc.get('disallow', []))
 # packages which are added to a newly created environment by default
 create_default_packages = list(rc.get('create_default_packages', []))
+update_dependencies = bool(rc.get('update_dependencies', True))
 
 # ssl_verify can be a boolean value or a filename string
 ssl_verify = rc.get('ssl_verify', True)

@@ -80,10 +80,6 @@ if on_win:
     import ctypes
     from ctypes import wintypes
 
-    # on Windows we cannot update these packages in the root environment
-    # because of the file lock problem
-    win_ignore_root = set(['python'])
-
     CreateHardLink = ctypes.windll.kernel32.CreateHardLinkW
     CreateHardLink.restype = wintypes.BOOL
     CreateHardLink.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR,
@@ -201,7 +197,7 @@ def rm_rf(path, max_retries=5, trash=True):
 
                     if trash:
                         try:
-                            move_to_trash(path)
+                            move_path_to_trash(path)
                             if not isdir(path):
                                 return
                         except OSError as e2:
@@ -328,21 +324,41 @@ def create_meta(prefix, dist, info_dir, extra_info):
 
 
 def mk_menus(prefix, files, remove=False):
-    if abspath(prefix) != abspath(sys.prefix):
-        # we currently only want to create menu items for packages
-        # in default environment
-        return
+    """
+    Create cross-platform menu items (e.g. Windows Start Menu)
+
+    Passes all menu config files %PREFIX%/Menu/*.json to ``menuinst.install``.
+    ``remove=True`` will remove the menu items.
+    """
     menu_files = [f for f in files
-                  if f.startswith('Menu/') and f.endswith('.json')]
+                  if f.lower().startswith('menu/')
+                  and f.lower().endswith('.json')]
     if not menu_files:
         return
+    elif basename(abspath(prefix)).startswith('_'):
+        logging.warn("Environment name starts with underscore '_'.  "
+                     "Skipping menu installation.")
+        return
+
     try:
         import menuinst
-    except ImportError:
+    except ImportError as e:
+        logging.warn("Menuinst could not be imported:")
+        logging.warn(e.message)
         return
+
+    env_name = (None if abspath(prefix) == abspath(sys.prefix) else
+                basename(prefix))
+    env_setup_cmd = ("activate %s" % env_name) if env_name else None
     for f in menu_files:
         try:
-            menuinst.install(join(prefix, f), remove, prefix)
+            if menuinst.__version__.startswith('1.0'):
+                menuinst.install(join(prefix, f), remove, prefix)
+            else:
+                menuinst.install(join(prefix, f), remove,
+                                 root_prefix=sys.prefix,
+                                 target_prefix=prefix, env_name=env_name,
+                                 env_setup_cmd=env_setup_cmd)
         except:
             stdoutlog.error("menuinst Exception:")
             stdoutlog.error(traceback.format_exc())
@@ -434,9 +450,9 @@ def try_hard_link(pkgs_dir, prefix, dist):
     dst = join(prefix, '.tmp-%s' % dist)
     assert isfile(src), src
     assert not isfile(dst), dst
-    if not isdir(prefix):
-        os.makedirs(prefix)
     try:
+        if not isdir(prefix):
+            os.makedirs(prefix)
         _link(src, dst, LINK_HARD)
         return True
     except OSError:
@@ -525,7 +541,7 @@ def is_linked(prefix, dist):
     except IOError:
         return None
 
-def delete_trash():
+def delete_trash(prefix=None):
     from conda import config
 
     for pkg_dir in config.pkgs_dirs:
@@ -536,7 +552,17 @@ def delete_trash():
         except OSError as e:
             log.debug("Could not delete the trash dir %s (%s)" % (trash_dir, e))
 
-def move_to_trash(path):
+def move_to_trash(prefix, f, tempdir=None):
+    """
+    Move a file f from prefix to the trash
+
+    tempdir is a deprecated parameter, and will be ignored.
+
+    This function is deprecated in favor of `move_path_to_trash`.
+    """
+    return move_path_to_trash(join(prefix, f))
+
+def move_path_to_trash(path):
     """
     Move a path to the trash
     """
@@ -586,12 +612,6 @@ def link(pkgs_dir, prefix, dist, linktype=LINK_HARD, index=None):
     index = index or {}
     log.debug('pkgs_dir=%r, prefix=%r, dist=%r, linktype=%r' %
               (pkgs_dir, prefix, dist, linktype))
-    if (on_win and abspath(prefix) == abspath(sys.prefix) and
-              name_dist(dist) in win_ignore_root):
-        # on Windows we have the file lock problem, so don't allow
-        # linking or unlinking some packages
-        log.warn('Ignored: %s' % dist)
-        return
 
     source_dir = join(pkgs_dir, dist)
     if not run_script(source_dir, dist, 'pre-link', prefix):
@@ -603,49 +623,33 @@ def link(pkgs_dir, prefix, dist, linktype=LINK_HARD, index=None):
     no_link = read_no_link(info_dir)
 
     with Locked(prefix), Locked(pkgs_dir):
-        futures = {}
-        with Executor() as executor:
-            for f in files:
-                src = join(source_dir, f)
-                dst = join(prefix, f)
-                dst_dir = dirname(dst)
-                if not isdir(dst_dir):
-                    os.makedirs(dst_dir)
-                if os.path.exists(dst):
-                    log.warn("file already exists: %r" % dst)
-                    try:
-                        os.unlink(dst)
-                    except OSError:
-                        log.error('failed to unlink: %r' % dst)
-                        if on_win:
-                            try:
-                                move_to_trash(dst)
-                            except ImportError:
-                                # This shouldn't be an issue in the installer anyway
-                                pass
+        for f in files:
+            src = join(source_dir, f)
+            dst = join(prefix, f)
+            dst_dir = dirname(dst)
+            if not isdir(dst_dir):
+                os.makedirs(dst_dir)
+            if os.path.exists(dst):
+                log.warn("file already exists: %r" % dst)
+                try:
+                    os.unlink(dst)
+                except OSError:
+                    log.error('failed to unlink: %r' % dst)
+                    if on_win:
+                        try:
+                            move_path_to_trash(dst)
+                        except ImportError:
+                            # This shouldn't be an issue in the installer anyway
+                            pass
 
-                lt = linktype
-                if f in has_prefix_files or f in no_link or islink(src):
-                    lt = LINK_COPY
-
-                if has_futures:
-                    future = executor.submit(_link, src, dst, lt)
-                    futures[future] = (src, dst, lt)
-                else:
-                    try:
-                        _link(src,dst,lt)
-                    except OSError as e:
-                        log.error('failed to link (src=%r, dst=%r, type=%r, error=%r)' %
-                                  (src, dst, lt, e))
-
-            if has_futures:
-                for future in concurrent.futures.as_completed(futures):
-                    try:
-                        future.result()
-                    except OSError as e:
-                        src, dst, lt = futures[future]
-                        log.error('failed to link (src=%r, dst=%r, type=%r, error=%r)' %
-                                  (src, dst, lt, e))
+            lt = linktype
+            if f in has_prefix_files or f in no_link or islink(src):
+                lt = LINK_COPY
+            try:
+                _link(src, dst, lt)
+            except OSError as e:
+                log.error('failed to link (src=%r, dst=%r, type=%r, error=%r)' %
+                          (src, dst, lt, e))
 
         if name_dist(dist) == '_cache':
             return
@@ -696,13 +700,6 @@ def unlink(prefix, dist):
     Remove a package from the specified environment, it is an error if the
     package does not exist in the prefix.
     '''
-    if (on_win and abspath(prefix) == abspath(sys.prefix) and
-              name_dist(dist) in win_ignore_root):
-        # on Windows we have the file lock problem, so don't allow
-        # linking or unlinking some packages
-        log.warn('Ignored: %s' % dist)
-        return
-
     with Locked(prefix):
         run_script(prefix, dist, 'pre-unlink')
 
@@ -723,7 +720,7 @@ def unlink(prefix, dist):
                 if on_win and os.path.exists(join(prefix, f)):
                     try:
                         log.debug("moving to trash")
-                        move_to_trash(dst)
+                        move_path_to_trash(dst)
                     except ImportError:
                         # This shouldn't be an issue in the installer anyway
                         pass

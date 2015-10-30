@@ -47,7 +47,9 @@ def print_dists(dists_extras):
         print(line)
 
 
-def display_actions(actions, index):
+def display_actions(actions, index, show_channel_urls=None):
+    if show_channel_urls is None:
+        show_channel_urls = config.show_channel_urls
     if actions.get(inst.FETCH):
         print("\nThe following packages will be downloaded:\n")
 
@@ -55,7 +57,7 @@ def display_actions(actions, index):
         for dist in actions[inst.FETCH]:
             info = index[dist + '.tar.bz2']
             extra = '%15s' % human_bytes(info['size'])
-            if config.show_channel_urls:
+            if show_channel_urls:
                 extra += '  %s' % config.canonical_channel_name(
                                        info.get('channel'))
             disp_lst.append((dist, extra))
@@ -94,8 +96,8 @@ def display_actions(actions, index):
 
 
 
-    #             Put a minimum length here---.    .--For the :
-    #                                         v    v
+    #                     Put a minimum length here---.    .--For the :
+    #                                                 v    v
     maxpkg = max(len(max(packages or [''], key=len)), 0) + 1
     maxoldver = len(max(packages.values() or [['']], key=lambda i: len(i[0]))[0])
     maxnewver = len(max(packages.values() or [['', '']], key=lambda i: len(i[1]))[1])
@@ -117,13 +119,13 @@ def display_actions(actions, index):
         # That's right. I'm using old-style string formatting to generate a
         # string with new-style string formatting.
         oldfmt[pkg] = '{pkg:<%s} {vers[0]:<%s}' % (maxpkg, maxoldver)
-        if config.show_channel_urls:
+        if show_channel_urls:
             oldfmt[pkg] += ' {channel[0]:<%s}' % maxoldchannel
         if packages[pkg][0]:
             newfmt[pkg] = '{vers[1]:<%s}' % maxnewver
         else:
             newfmt[pkg] = '{pkg:<%s} {vers[1]:<%s}' % (maxpkg, maxnewver)
-        if config.show_channel_urls:
+        if show_channel_urls:
             newfmt[pkg] += ' {channel[1]:<%s}' % maxnewchannel
         # TODO: Should we also care about the old package's link type?
         if pkg in linktypes and linktypes[pkg] != install.LINK_HARD:
@@ -202,8 +204,7 @@ def plan_from_actions(actions):
         op_order = inst.action_codes
 
     assert inst.PREFIX in actions and actions[inst.PREFIX]
-    res = [
-           ('PREFIX', '%s' % actions[inst.PREFIX])]
+    res = [('PREFIX', '%s' % actions[inst.PREFIX])]
 
     if sys.platform == 'win32':
         # Always link/unlink menuinst first on windows in case a subsequent
@@ -249,7 +250,9 @@ def ensure_linked_actions(dists, prefix):
 
         extracted_in = extracted_where(dist)
         if extracted_in:
-            if install.try_hard_link(extracted_in, prefix, dist):
+            if config.always_copy:
+                lt = install.LINK_COPY
+            elif install.try_hard_link(extracted_in, prefix, dist):
                 lt = install.LINK_HARD
             else:
                 lt = (install.LINK_SOFT if (config.allow_softlinks and
@@ -265,7 +268,9 @@ def ensure_linked_actions(dists, prefix):
                                   'index.json')
                 with open(index_json, 'w'):
                     pass
-                if install.try_hard_link(config.pkgs_dirs[0], prefix, dist):
+                if config.always_copy:
+                    lt = install.LINK_COPY
+                elif install.try_hard_link(config.pkgs_dirs[0], prefix, dist):
                     lt = install.LINK_HARD
                 else:
                     lt = (install.LINK_SOFT if (config.allow_softlinks and
@@ -367,7 +372,8 @@ def add_defaults_to_specs(r, linked, specs):
             specs.append(dist2spec3v(names_linked[name]))
             continue
 
-        if (name, def_ver) in [('python', '3.3'), ('python', '3.4')]:
+        if (name, def_ver) in [('python', '3.3'), ('python', '3.4'),
+            ('python', '3.5')]:
             # Don't include Python 3 in the specs if this is the Python 3
             # version of conda.
             continue
@@ -385,7 +391,7 @@ def get_pinned_specs(prefix):
 
 
 def install_actions(prefix, index, specs, force=False, only_names=None,
-                    pinned=True, minimal_hint=False):
+                    pinned=True, minimal_hint=False, update_deps=True, prune=False):
     r = Resolve(index)
     linked = install.linked(prefix)
 
@@ -401,7 +407,8 @@ def install_actions(prefix, index, specs, force=False, only_names=None,
 
     must_have = {}
     for fn in r.solve(specs, [d + '.tar.bz2' for d in linked],
-                      config.track_features, minimal_hint=minimal_hint):
+                      config.track_features, minimal_hint=minimal_hint,
+                      update_deps=update_deps):
         dist = fn[:-8]
         name = install.name_dist(dist)
         if only_names and name not in only_names:
@@ -409,10 +416,6 @@ def install_actions(prefix, index, specs, force=False, only_names=None,
         must_have[name] = dist
 
     if is_root_prefix(prefix):
-        if install.on_win:
-            for name in install.win_ignore_root:
-                if name in must_have:
-                    del must_have[name]
         for name in config.foreign:
             if name in must_have:
                 del must_have[name]
@@ -422,7 +425,7 @@ def install_actions(prefix, index, specs, force=False, only_names=None,
         pass
     else:
         # disallow conda from being installed into all other environments
-        if 'conda' in must_have:
+        if 'conda' in must_have or 'conda-env' in must_have:
             sys.exit("Error: 'conda' can only be installed into the "
                      "root environment")
 
@@ -438,7 +441,9 @@ def install_actions(prefix, index, specs, force=False, only_names=None,
 
     for dist in sorted(linked):
         name = install.name_dist(dist)
-        if name in must_have and dist != must_have[name]:
+        replace_existing = name in must_have and dist != must_have[name]
+        prune_it = prune and dist not in smh
+        if replace_existing or prune_it:
             add_unlink(actions, dist)
 
     return actions
