@@ -282,7 +282,7 @@ def pkgs_dir_from_envs_dir(envs_dir):
     if abspath(envs_dir) == abspath(join(context.root_dir, 'envs')):
         return join(context.root_dir, 'pkgs32' if context.force_32bit else 'pkgs')
     else:
-        return join(envs_dir, '.pkgs')
+        return join(envs_dir, '.pkgs32' if context.force_32bit else '.pkgs')
 
 
 def get_help_dict():
