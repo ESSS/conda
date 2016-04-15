@@ -163,7 +163,7 @@ def pkgs_dir_from_envs_dir(envs_dir):
     if abspath(envs_dir) == abspath(join(root_dir, 'envs')):
         return join(root_dir, 'pkgs32' if force_32bit else 'pkgs')
     else:
-        return join(envs_dir, '.pkgs')
+        return join(envs_dir, '.pkgs32' if force_32bit else '.pkgs')
 
 pkgs_dirs = [pkgs_dir_from_envs_dir(envs_dir) for envs_dir in envs_dirs]
 

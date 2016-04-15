@@ -56,6 +56,24 @@ except ImportError:
         def __exit__(self, exc_type, exc_value, traceback):
             pass
 
+try:
+    import concurrent.futures
+    import multiprocessing
+    Executor = lambda: concurrent.futures.ThreadPoolExecutor(
+        max_workers=multiprocessing.cpu_count())
+    has_futures = True
+except ImportError:
+    has_futures = False
+    class Executor(object):
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            pass
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            pass
+
 on_win = bool(sys.platform == 'win32')
 
 if on_win:
