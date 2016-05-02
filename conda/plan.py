@@ -410,7 +410,11 @@ def install_actions(prefix, index, specs, force=False, only_names=None,
     if config.track_features:
         specs.extend(x + '@' for x in config.track_features)
 
-    pkgs = r.install(specs, [d + '.tar.bz2' for d in linked], update_deps=update_deps)
+    installed = [d + '.tar.bz2' for d in linked]
+    if prune:
+        installed = []
+
+    pkgs = r.install(specs, installed, update_deps=update_deps)
     for fn in pkgs:
         dist = fn[:-8]
         name = install.name_dist(dist)
