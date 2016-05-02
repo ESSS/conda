@@ -582,7 +582,7 @@ def move_path_to_trash(path):
                 continue
 
         trash_dir = tempfile.mkdtemp(dir=trash_dir)
-        trash_dir = join(trash_dir, relpath(os.path.dirname(path), config.root_dir))
+        trash_dir = join(trash_dir, relpath(os.path.dirname(path), config.envs_dir))
 
         try:
             os.makedirs(trash_dir)
