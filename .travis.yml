@@ -11,6 +11,9 @@ env:
     - PY_VERSION=3.4
     - PY_VERSION=3.5
 
+git:
+  depth: 9999999  # Fix git describe issues, see https://github.com/travis-ci/travis-ci/issues/3412
+
 install:
   - printenv
   - source ./utils/travis-bootstrap-conda.sh
